@@ -77,42 +77,28 @@ flowers.each do |f|
 
   exposure = html.css("li.detail.yellow ul li").text.strip.downcase
   size = html.css("li.detail.blue ul li").text.downcase
-  attracts = html.css("div.field-field-attracts-wildlife div div").inner_html.split(" ")
-  resists = html.css("div.field-field-resists-wildlife div div").inner_html.split(" ")
 
-  habit = html.css("div.field-field-plant-habit div div").text
-  habit = habit.gsub /[\n\s]*Habit:[\n\s]*/, ''
-  habit = habit.gsub /\s\s+/, ''
-  habit = habit.strip[1...-1]
+  attracts = html.css("div.field-field-attracts-wildlife div div").text.downcase.split(" ")
+  resists = html.css("div.field-field-resists-wildlife div div").text.downcase.split(" ")
 
-  bloom = html.css("div.field-field-plant-bloom-time div div").text
-  bloom = bloom.sub(/[\s\n]*/, '')
+  habit = html.css("div.field-field-plant-habit div div").text.downcase
+  habit = habit.gsub(/(?:\n|habit:|\s\s+|\u{00A0})*/, '')
 
-  bloom = html.css("div.field-field-plant-bloom-time div div")
-  b2 = []
-  bloom.each do |b|
-    b = b.inner_html.sub(/<[^>]*>/m, '')
-    b = b.sub(/B[^>]*>/m, '')
-    b2.push(b.strip.downcase) unless b.include?(":")
-  end
+  bloom = html.css("div.field-field-plant-bloom-time div div").text.downcase
+  bloom = bloom.gsub(/(?:\n|bloom\stime:|\s\s+)*/, '').split(/\u{00A0}/)
+  bloom.delete_if { |b| b.empty? }
 
-  uses = html.css("div.field-field-plant-uses div div").text.split
-  u2 = []
-  uses.each { |u| u2.push(u) unless u.include? "Use" }
+  uses = html.css("div.field-field-plant-uses div div").text.downcase.split
+  uses.delete_if { |u| u.include? "use" }
 
-  spread = html.css("div.field-field-spread-maximum").text.strip
-  spread = spread.sub(/Spread.*\n\s*/, "")
+  spread = html.css("div.field-field-spread-maximum").text.downcase
+  spread = spread.gsub(/(?:\n|spread:|\s\s+|\u{00A0})*/, '')
 
-  tol = html.css("div.group-features div").text.split("\n")
-  tolerance = []
-  tol.each do |t|
-    t = t.strip!
-    tolerance.push(t) if !t.nil? && t.include?("Tolerant") && !tolerance.include?(t)
-  end
+  tolerance = html.xpath('//div[contains(@class, "tolerant")]').text.downcase.split(/\s\s+/)
+  tolerance.delete_if { |t| t.empty? }
 
-  dur = html.css("div.field-field-plant-duration").text.split(" ")
-  duration = []
-  dur.each { |d| duration.push(d) unless d.include?("Duration")}
+  duration = html.css("div.field-field-plant-duration").text.downcase
+  duration = duration.gsub(/(?:\n|duration:|\s\s+|\u{00A0})*/, '')
 
   notes = html.css("div.field-field-maintenance-notes p").first
   unless notes.nil?
@@ -128,32 +114,16 @@ flowers.each do |f|
   end
 
   element = []
-
-  pw_name = unless series.empty?
-              series << " " << variety
-            else
-              variety
-            end
-
-  plant_type =  unless genus.empty?
-                  genus << " " << species
-                else
-                  species
-                end
-  
-  element << pw_name << plant_type
-
+  element << "#{series} #{variety}".strip << "#{genus} #{species}".strip
   element << common << exposure << size
-
   csv_write(attracts, element)
   csv_write(resists, element)
   element << habit
-  csv_write(b2, element)
-  csv_write(u2, element)
+  csv_write(bloom, element)
+  csv_write(uses, element)
   element << spread
   csv_write(tolerance, element)
-  csv_write(duration, element)
-  element << notes
+  element << duration << notes
 
   data << element
   misses << f if exposure.empty?
