@@ -1,25 +1,11 @@
-# TODO
-# autoload plants that lead to search result page
-# fix capitalization of words like "To"
-# fix comma placement for words like "or"
+# A script to read news articles
 
 require 'rubygems'
 require 'nokogiri'
 require 'open-uri'
 require 'mechanize'
-require 'csv'
 
-def csv_write(arr, element)
-  if arr.empty?
-    element << nil
-  else
-    string = ""
-    arr.each { |a| string << "#{a}, " if a != [] }
-    2.times { string.slice!(string.length - 1) }
-    element << "#{string}"
-  end
-end
-
+# parse flower names from input file
 flowers = []
 f = File.open("flowerlist.txt", "r")
 f.each_line do |line|
@@ -49,8 +35,8 @@ data << headers
 agent = Mechanize.new
 
 flowers.each do |f|
+  # run search with flower name
   page = agent.get("https://www.provenwinners.com/")
-
   form = page.form_with(:action => "/search/content")
   form.search_theme_form = f
   page = agent.submit(form, form.buttons.first)
@@ -63,6 +49,11 @@ flowers.each do |f|
         leaves = html.css("div.content-top li.leaf a")
         load = ""
         leaves.each { |l| load = l if l.text.include?("Plant") }
+        if load == ""
+          # search has failed, move on to next flower
+          misses << f
+          next
+        end
         html = Nokogiri::HTML(agent.click(load).body)
         link = html.css("div#content div.field-branded-name a")[0]
       end
@@ -79,7 +70,9 @@ flowers.each do |f|
   size = html.css("li.detail.blue ul li").text.downcase
 
   attracts = html.css("div.field-field-attracts-wildlife div div").text.downcase.split(" ")
+  attracts = attracts.join(", ")
   resists = html.css("div.field-field-resists-wildlife div div").text.downcase.split(" ")
+  resists = resists.join(", ")
 
   habit = html.css("div.field-field-plant-habit div div").text.downcase
   habit = habit.gsub(/(?:\n|habit:|\s\s+|\u{00A0})*/, '')
@@ -87,46 +80,36 @@ flowers.each do |f|
   bloom = html.css("div.field-field-plant-bloom-time div div").text.downcase
   bloom = bloom.gsub(/(?:\n|bloom\stime:|\s\s+)*/, '').split(/\u{00A0}/)
   bloom.delete_if { |b| b.empty? }
+  bloom = bloom.join(", ")
 
-  uses = html.css("div.field-field-plant-uses div div").text.downcase.split
-  uses.delete_if { |u| u.include? "use" }
+  uses = html.css("div.field-field-plant-uses div div").text.downcase
+  uses = uses.gsub(/(?:\n|uses:|\s\s+)*/, '').split(/\u{00A0}/)
+  uses.delete_if { |u| u.empty? }
+  uses = uses.join(", ")
 
   spread = html.css("div.field-field-spread-maximum").text.downcase
   spread = spread.gsub(/(?:\n|spread:|\s\s+|\u{00A0})*/, '')
 
   tolerance = html.xpath('//div[contains(@class, "tolerant")]').text.downcase.split(/\s\s+/)
   tolerance.delete_if { |t| t.empty? }
+  tolerance = tolerance.join(", ")
 
   duration = html.css("div.field-field-plant-duration").text.downcase
   duration = duration.gsub(/(?:\n|duration:|\s\s+|\u{00A0})*/, '')
 
   notes = html.css("div.field-field-maintenance-notes p").first
   unless notes.nil?
-    temp = notes.text
-    notes = ""
-    counter = 0
-    temp.scan(/[A-Z][^.]*(?:deadhead|heat|soil)[^.]*./).each do |s|
-      notes << s << " "
-      counter += 1
-      break if counter == 3
-    end
-    notes.chop!
+    notes = notes.text.scan(/[A-Z][^.]*(?:deadhead|heat|soil)[^.]*./)[0..2] unless notes.nil?
+    notes = notes.join(" ")
   end
 
   element = []
   element << "#{series} #{variety}".strip << "#{genus} #{species}".strip
-  element << common << exposure << size
-  csv_write(attracts, element)
-  csv_write(resists, element)
-  element << habit
-  csv_write(bloom, element)
-  csv_write(uses, element)
-  element << spread
-  csv_write(tolerance, element)
-  element << duration << notes
+  element << common << exposure << size << attracts << resists << bloom
+  element << uses << tolerance << habit << spread << duration << notes
 
   data << element
-  misses << f if exposure.empty?
+  misses << f if element.empty?
 
   headers.zip(element).each do |h, e|
     puts "#{h}: #{e}"
